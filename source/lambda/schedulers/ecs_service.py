@@ -26,34 +26,34 @@ from configuration.setbuilders.weekday_setbuilder import WeekdaySetBuilder
 
 RESTRICTED_ECS_TAG_VALUE_SET_CHARACTERS = r"[^a-zA-Z0-9\s_\.:+/=\\@-]"
 
-ERR_STARTING_INSTANCE = "Error starting rds {} {} ({})"
-ERR_STOPPING_INSTANCE = "Error stopping rds {} {}, ({})"
+ERR_STARTING_INSTANCE = "Error starting ecs {} {} ({})"
+ERR_STOPPING_INSTANCE = "Error stopping ecs {} {}, ({})"
 ERR_DELETING_SNAPSHOT = "Error deleting snapshot {}"
 
 INF_FETCHED_CLUSTERS = "Number of fetched ecs clusters is {}, number of instances in a schedulable state is {}"
 
 INF_ADD_TAGS = "Adding {} tags {} to instance {}"
 INF_DELETE_SNAPSHOT = "Deleted previous snapshot {}"
-INF_FETCHED = "Number of fetched rds {} is {}, number of schedulable  resources is {}"
-INF_FETCHING_RESOURCES = "Fetching rds {} for account {} in region {}"
+INF_FETCHED = "Number of fetched ecs {} is {}, number of schedulable  resources is {}"
+INF_FETCHING_RESOURCES = "Fetching ecs {} for account {} in region {}"
 INF_REMOVE_KEYS = "Removing {} key(s) {} from instance {}"
-INF_STOPPED_RESOURCE = "Stopped rds {} \"{}\""
+INF_STOPPED_RESOURCE = "Stopped ecs {} \"{}\""
 
-DEBUG_READ_REPLICA = "Can not schedule rds instance \"{}\" because it is a read replica of instance {}"
-DEBUG_READ_REPLICA_SOURCE = "Can not schedule rds instance \"{}\" because it is the source for read copy instance(s) {}"
-DEBUG_SKIPPING_INSTANCE = "Skipping rds {} {} because it is not in a start or stop-able state ({})"
-DEBUG_WITHOUT_SCHEDULE = "Skipping rds {} {} without schedule"
-DEBUG_SELECTED = "Selected rds instance {} in state ({}) for schedule {}"
+DEBUG_READ_REPLICA = "Can not schedule ecs instance \"{}\" because it is a read replica of instance {}"
+DEBUG_READ_REPLICA_SOURCE = "Can not schedule ecs instance \"{}\" because it is the source for read copy instance(s) {}"
+DEBUG_SKIPPING_INSTANCE = "Skipping ecs {} {} because it is not in a start or stop-able state ({})"
+DEBUG_WITHOUT_SCHEDULE = "Skipping ecs {} {} without schedule"
+DEBUG_SELECTED = "Selected ecs instance {} in state ({}) for schedule {}"
 DEBUG_NO_SCHEDULE_TAG = "Instance {} has no schedule tag named {}"
 
 WARN_TAGGING_STARTED = "Error setting start or stop tags to started instance {}, ({})"
 WARN_TAGGING_STOPPED = "Error setting start or stop tags to stopped instance {}, ({})"
-WARN_RDS_TAG_VALUE = "Tag value \"{}\" for tag \"{}\" changed to \"{}\" because it did contain characters that are not allowed " \
-                    "in RDS tag values. The value can only contain only the set of Unicode letters, digits, " \
+WARN_ECS_TAG_VALUE = "Tag value \"{}\" for tag \"{}\" changed to \"{}\" because it did contain characters that are not allowed " \
+                    "in ECS tag values. The value can only contain only the set of Unicode letters, digits, " \
                      "white-space, '_', '.', '/', '=', '+', '-'"
 
-MAINTENANCE_SCHEDULE_NAME = "RDS preferred Maintenance Window Schedule"
-MAINTENANCE_PERIOD_NAME = "RDS preferred Maintenance Window Period"
+MAINTENANCE_SCHEDULE_NAME = "ECS preferred Maintenance Window Schedule"
+MAINTENANCE_PERIOD_NAME = "ECS preferred Maintenance Window Period"
 
 
 class EcsService:
@@ -376,44 +376,10 @@ class EcsService:
             value = re.sub(RESTRICTED_ECS_TAG_VALUE_SET_CHARACTERS, " ", original_value)
             value = value.replace("\n", " ")
             if value != original_value:
-                self._logger.warning(WARN_RDS_TAG_VALUE, original_value, t, value)
+                self._logger.warning(WARN_ECS_TAG_VALUE, original_value, t, value)
                 t["value"] = value
         return result
 
-    def _stop_instance(self, client, inst):
-
-        def does_snapshot_exist(name):
-
-            try:
-                resp = client.describe_db_snapshots_with_retries(DBSnapshotIdentifier=name, SnapshotType="manual")
-                snapshot = resp.get("DBSnapshots", None)
-                return snapshot is not None
-            except Exception as ex:
-                if type(ex).__name__ == "DBSnapshotNotFoundFault":
-                    return False
-                else:
-                    raise ex
-
-        args = {
-            "DBInstanceIdentifier": inst.id
-        }
-
-        if self._config.create_rds_snapshot:
-            snapshot_name = "{}-stopped-{}".format(self._stack_name, inst.id).replace(" ", "")
-            args["DBSnapshotIdentifier"] = snapshot_name
-
-            try:
-                if does_snapshot_exist(snapshot_name):
-                    client.delete_db_snapshot_with_retries(DBSnapshotIdentifier=snapshot_name)
-                    self._logger.info(INF_DELETE_SNAPSHOT, snapshot_name)
-            except Exception as ex:
-                self._logger.error(ERR_DELETING_SNAPSHOT, snapshot_name)
-
-        try:
-            client.stop_db_instance_with_retries(**args)
-            self._logger.info(INF_STOPPED_RESOURCE, "instance", inst.id)
-        except Exception as ex:
-            self._logger.error(ERR_STOPPING_INSTANCE, "instance", inst.instance_str, str(ex))
 
     def _tag_stopped_resource(self, client, ecs_resource):
         stop_tags = self._validate_ecs_tag_values(self._config.stopped_tags)
@@ -486,9 +452,6 @@ class EcsService:
 
         self._init_scheduler(kwargs)
         methods = ["update_service",
-                   "stop_db_cluster",
-                   "describe_db_snapshots",
-                   "delete_db_snapshot",
                    "tag_resource",
                    "untag_resource"]
 
