@@ -94,39 +94,6 @@ class EcsService:
         self._config = args.get(schedulers.PARAM_CONFIG)
         self._instance_tags = None
 
-    @property
-    def rds_resource_tags(self):
-
-        if self._instance_tags is None:
-            tag_client = get_client_with_retries("resourcegroupstaggingapi",
-                                                 methods=["get_resources"],
-                                                 session=self._session,
-                                                 context=self._context,
-                                                 region=self._region)
-
-            args = {
-                "TagFilters": [{"key": self._tagname}],
-                "ResourcesPerPage": 50,
-                "ResourceTypeFilters": ["rds:db", "rds:cluster"]
-            }
-
-            self._instance_tags = {}
-
-            while True:
-
-                resp = tag_client.get_resources_with_retries(**args)
-
-                for resource in resp.get("ResourceTagMappingList", []):
-                    self._instance_tags[resource["ResourceARN"]] = {tag["key"]: tag["value"]
-                                                                    for tag in resource.get("tags", {})
-                                                                    if tag["key"] in ["Name", self._tagname]}
-
-                if resp.get("PaginationToken", "") != "":
-                    args["PaginationToken"] = resp["PaginationToken"]
-                else:
-                    break
-
-        return self._instance_tags
 
     @staticmethod
     def build_schedule_from_maintenance_window(period_str):
